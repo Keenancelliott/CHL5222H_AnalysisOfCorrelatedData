@@ -1,0 +1,142 @@
+---
+title: "CHL5222 Analysis of Correlated Data (Winter 2024)"
+subtitle: "Final Project (Group D)"
+output: html_notebook
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(tidyr)
+library(tinytex)
+library(here)
+library(PupillometryR)
+library(knitr)
+library(kableExtra)
+library(nlme)
+library(car)
+library(contrast)
+library(AICcmodavg)
+library(foreign)
+library(geepack)
+library(gee)
+library(MASS)
+library(lme4)
+library(glmm)
+library(mice)
+library(micemd)
+library(mitml)
+library(survival)
+library(ggfortify)
+library(survminer)
+library(coxme)
+library(MetBrewer)
+library(JM)
+library(rms)
+library(table1)
+library(flextable)
+library(gtsummary)
+library(ggplot2)
+
+knitr::opts_knit$set(root.dir = here())
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+```
+
+
+## Change the directory to the path where nursebp.csv is located
+```{r data-input}
+bp_dat <- read.csv("./YOURFILEPATHHERE/nursebp.csv")
+head(bp_dat)
+```
+
+```{r descriptive-stats}
+# Set factors for categorical variables
+bp_dat$PHASE <- factor(bp_dat$PHASE, levels = c("F", "L"),
+                       labels = c("Follicular", "Luteal"))
+bp_dat$DAY <- factor(bp_dat$DAY, levels = c("NW", "W"),
+                     labels = c("No", "Yes"))
+bp_dat$POSTURE <- factor(bp_dat$POSTURE, levels = c("STAND", "SIT", "RECLINE"),
+                         labels = c("Standing", "Sitting", "Reclined"), 
+                         exclude = NULL)
+bp_dat$FH123 <- factor(bp_dat$FH123, levels = c("NO", "YES", "YESYES"),
+                       labels = c("No family history", "1 hypertensive parent", 
+                                  "Both parents hypertensive"))
+bp_dat$STR <- factor(bp_dat$STR, levels = c(1, 2, 3, 4, 5),
+                     labels = c("1", "2", "3", "4", "5"), exclude = NULL)
+bp_dat$HAP <- factor(bp_dat$HAP, levels = c(1, 2, 3, 4, 5),
+                     labels = c("1", "2", "3", "4", "5"), exclude = NULL)
+bp_dat$TIR <- factor(bp_dat$TIR, levels = c(1, 2, 3, 4, 5),
+                     labels = c("1", "2", "3", "4", "5"), exclude = NULL)
+
+# Set labels for variables in data set
+label(bp_dat$SYS) <- "Systolic BP, mmHg"
+label(bp_dat$AGE) <- "Age, years"
+label(bp_dat$HRT) <- "Heart rate, beats per minute"
+label(bp_dat$MNACT5) <- "Activity level, frequency of movement"
+label(bp_dat$PHASE) <- "Menstrual phase"
+label(bp_dat$DAY) <- "Workday"
+label(bp_dat$FH123) <- "Family history of hypertension"
+label(bp_dat$POSTURE) <- "Position during BP measurement"
+label(bp_dat$STR) <- "Self-rating for level of stress"
+label(bp_dat$HAP) <- "Self-rating for level of happiness"
+label(bp_dat$TIR) <- "Self-rating for level of tiredness"
+
+# Create Table 1 descriptive stats table using the table1 package
+table_1 <- table1(~SYS + AGE + HRT + MNACT5 + PHASE + DAY + FH123 + POSTURE + 
+                    STR + HAP + TIR,
+                  data = bp_dat)
+t1flex(table_1) %>%
+  save_as_docx(path = "table_1.docx")
+```
+
+```{r lme-model}
+# Drop observations with missing/NA values for complete case analysis
+bp_dat_cc <- bp_dat %>%
+  drop_na()
+
+# Linear mixed effects model with random subject-level intercepts
+lme_mod <- lme(SYS ~ AGE + HRT + MNACT5 + DAY + FH123 + STR + TIR +
+                 DAY*AGE + HRT*MNACT5,
+               random = ~ 1 | SNUM,
+               data = bp_dat_cc)
+
+lme_mod %>%
+  tbl_regression() %>%
+  as_gt() %>%
+  gt::gtsave(filename = "lme_table.docx")
+
+tbl_regression(lme_mod) # Create Table 2 lme parameter estimates 
+summary(lme_mod)
+intervals(lme_mod)
+```
+
+```{r plot-results}
+# Generate predicted values based on the lme model
+sys_pred <- predict(lme_mod)
+pred_sys <- cbind(bp_dat_cc, sys_pred)
+
+pred_sys <- pred_sys %>%
+  rename(Workday = DAY)
+
+# Plot observed and marginal predictions for each continuous predictor
+age <- ggplot(pred_sys, aes(x = AGE, y = SYS, color = Workday)) +
+  geom_point(alpha = 0.1) +
+  geom_smooth(aes(x = AGE, y = sys_pred), linetype = "solid", method = "gam") +
+  scale_colour_manual(values = c("#B2182B", "#4393C3")) + 
+  labs(x = "Age (year)", y = "Systolic blood pressure (mmHg)")
+
+hrt <- ggplot(pred_sys, aes(x = HRT, y = SYS, color = Workday)) +
+  geom_point(alpha = 0.1) +
+  geom_smooth(aes(x = HRT, y = sys_pred), linetype = "solid", method = "gam") +
+  scale_colour_manual(values = c("#B2182B", "#4393C3")) + 
+  labs(x = "Heart rate (bpm)", y = "Systolic blood pressure (mmHg)")
+
+act <- ggplot(pred_sys, aes(x = MNACT5, y = SYS, color = Workday)) +
+  geom_point(alpha = 0.1) +
+  geom_smooth(aes(x = MNACT5, y = sys_pred), linetype = "solid", method = "gam") +
+  scale_colour_manual(values = c("#B2182B", "#4393C3")) + 
+  labs(x = "Activity level (frequency of movement)", y = "Systolic blood pressure (mmHg)")
+
+ggsave("age.png", plot = age, height = 2.5, width = 6.5, units = "in", bg="white")
+ggsave("hrt.png", plot = hrt, height = 2.5, width = 6.5, units = "in", bg="white")
+ggsave("act.png", plot = act, height = 2.5, width = 6.5, units = "in", bg="white")
+```
