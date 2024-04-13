@@ -44,7 +44,7 @@ knitr::opts_chunk$set(warning = FALSE, message = FALSE)
 
 ## Change the directory to the path where nursebp.csv is located
 ```{r data-input}
-bp_dat <- read.csv("./YOURFILEPATHHERE/nursebp.csv")
+bp_dat <- read.csv("./YOURFILEPATH/nursebp.csv")
 head(bp_dat)
 ```
 
@@ -99,12 +99,16 @@ lme_mod <- lme(SYS ~ AGE + HRT + MNACT5 + DAY + FH123 + STR + TIR +
                random = ~ 1 | SNUM,
                data = bp_dat_cc)
 
-lme_mod %>%
-  tbl_regression() %>%
-  as_gt() %>%
-  gt::gtsave(filename = "lme_table.docx")
-
-tbl_regression(lme_mod) # Create Table 2 lme parameter estimates 
+####################################
+## The code below creates table 1 ##
+## and saves it to your computer  ##
+####################################
+# lme_mod %>%
+#   tbl_regression() %>%
+#   as_gt() %>%
+#   gt::gtsave(filename = "lme_table.docx")
+# 
+# tbl_regression(lme_mod) # Create Table 2 lme parameter estimates 
 summary(lme_mod)
 intervals(lme_mod)
 ```
